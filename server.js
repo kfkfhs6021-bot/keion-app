@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'reservations.json');
 
 app.use(express.json());
@@ -11,15 +11,27 @@ app.use(express.json());
 // JSONデータの読み込み
 const loadReservations = () => {
   if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+    try {
+      fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+    } catch (e) {
+      return []; // Read-only環境対策
+    }
   }
-  const data = fs.readFileSync(DATA_FILE);
-  return JSON.parse(data);
+  try {
+    const data = fs.readFileSync(DATA_FILE);
+    return JSON.parse(data);
+  } catch (e) {
+    return [];
+  }
 };
 
 // JSONデータの保存
 const saveReservations = (data) => {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('Save error:', e);
+  }
 };
 
 // 予約一覧API
@@ -58,7 +70,7 @@ app.delete('/api/reservations/:id', (req, res) => {
   res.json({ message: '削除しました。' });
 });
 
-// アプリ画面（HTML）
+// UI画面（カレンダー機能つき）
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -66,26 +78,38 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>軽音部 スタジオ予約</title>
+      <title>🎸 軽音部 スタジオ予約</title>
       <style>
-        body { font-family: sans-serif; max-width: 500px; margin: 20px auto; padding: 0 15px; background: #f9f9f9; }
-        h1 { text-align: center; color: #333; }
-        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.9em; }
-        input { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { width: 100%; margin-top: 15px; background: #007bff; color: white; border: none; padding: 12px; font-size: 1em; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 12px 0; }
-        .item:last-child { border-bottom: none; }
-        .del-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; width: auto; margin-top: 0; cursor: pointer; }
-        .time { font-size: 0.85em; color: #666; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px 15px; background: #f4f6f8; color: #333; }
+        h1 { text-align: center; color: #111; font-size: 1.5em; margin-bottom: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .card h3 { margin-top: 0; color: #007bff; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; font-size: 1.1em; }
+        
+        label { display: block; margin-top: 12px; font-weight: 600; font-size: 0.85em; color: #666; }
+        input { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95em; }
+        button.btn-primary { width: 100%; margin-top: 18px; background: #007bff; color: white; border: none; padding: 12px; font-size: 1em; font-weight: bold; border-radius: 6px; cursor: pointer; }
+        button.btn-primary:hover { background: #0056b3; }
+        
+        /* カレンダー日付切替枠 */
+        .date-picker-wrapper { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 15px; background: #eef5ff; padding: 10px 15px; border-radius: 8px; }
+        .date-picker-wrapper label { margin: 0; white-space: nowrap; color: #007bff; font-weight: bold; }
+        .date-picker-wrapper input { margin-top: 0; font-weight: bold; text-align: center; border: 1px solid #b8daff; background: #fff; }
+
+        /* タイムテーブル風カード */
+        .timeline-item { display: flex; align-items: center; justify-content: space-between; background: #f8f9fa; border-left: 5px solid #007bff; padding: 12px 15px; border-radius: 6px; margin-bottom: 10px; }
+        .time-badge { font-weight: bold; color: #007bff; font-size: 1.05em; }
+        .band-name { font-size: 1em; font-weight: 600; color: #222; margin-top: 3px; }
+        .del-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8em; cursor: pointer; }
+        .no-data { text-align: center; color: #888; padding: 25px 0; font-size: 0.9em; }
       </style>
     </head>
     <body>
       <h1>🎸 軽音部 スタジオ予約</h1>
       
+      <!-- 予約フォーム -->
       <div class="card">
-        <h3>新規予約</h3>
+        <h3>➕ 新規予約</h3>
         <label>バンド名 / お名前</label>
         <input type="text" id="name" placeholder="例: Aバンド（山田）">
         
@@ -95,33 +119,58 @@ app.get('/', (req, res) => {
         <label>終了日時</label>
         <input type="datetime-local" id="endTime">
         
-        <button onclick="addReservation()">予約を登録する</button>
+        <button class="btn-primary" onclick="addReservation()">予約を登録する</button>
       </div>
 
+      <!-- 日別スケジュール表示 -->
       <div class="card">
-        <h3>予約一覧</h3>
-        <div id="list">読み込み中...</div>
+        <h3>📅 予約スケジュール</h3>
+        
+        <div class="date-picker-wrapper">
+          <label>表示する日付:</label>
+          <input type="date" id="selectedDate" onchange="renderSchedule()">
+        </div>
+
+        <div id="scheduleList">読み込み中...</div>
       </div>
 
       <script>
+        let allReservations = [];
+
+        // 初期化：今日の日付をセット
+        document.getElementById('selectedDate').value = new Date().toISOString().split('T')[0];
+
         async function fetchReservations() {
           const res = await fetch('/api/reservations');
-          const data = await res.json();
-          const listEl = document.getElementById('list');
-          
-          if (data.length === 0) {
-            listEl.innerHTML = '<p style="color:#888;">現在予約はありません。</p>';
+          allReservations = await res.json();
+          renderSchedule();
+        }
+
+        function renderSchedule() {
+          const selectedDate = document.getElementById('selectedDate').value;
+          const listEl = document.getElementById('scheduleList');
+
+          if (!selectedDate) return;
+
+          // 選択された日付の予約だけを抽出
+          const filtered = allReservations.filter(r => {
+            const dateStr = r.startTime.split('T')[0];
+            return dateStr === selectedDate;
+          });
+
+          if (filtered.length === 0) {
+            listEl.innerHTML = '<div class="no-data">☕ この日の予約はありません（空き）</div>';
             return;
           }
 
-          listEl.innerHTML = data.map(r => {
-            const start = new Date(r.startTime).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const end = new Date(r.endTime).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+          listEl.innerHTML = filtered.map(r => {
+            const start = new Date(r.startTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            const end = new Date(r.endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
             return \`
-              <div class="item">
+              <div class="timeline-item">
                 <div>
-                  <strong>\${r.name}</strong><br>
-                  <span class="time">\${start} 〜 \${end}</span>
+                  <div class="time-badge">⏰ \${start} 〜 \${end}</div>
+                  <div class="band-name">🎸 \${r.name}</div>
                 </div>
                 <button class="del-btn" onclick="deleteReservation('\${r.id}')">削除</button>
               </div>
@@ -139,16 +188,22 @@ app.get('/', (req, res) => {
             return;
           }
 
-          await fetch('/api/reservations', {
+          const res = await fetch('/api/reservations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, startTime, endTime })
           });
 
-          document.getElementById('name').value = '';
-          document.getElementById('startTime').value = '';
-          document.getElementById('endTime').value = '';
-          fetchReservations();
+          if (res.ok) {
+            // 登録した日を表示日に合わせて画面更新
+            document.getElementById('selectedDate').value = startTime.split('T')[0];
+            document.getElementById('name').value = '';
+            document.getElementById('startTime').value = '';
+            document.getElementById('endTime').value = '';
+            fetchReservations();
+          } else {
+            alert('予約の登録に失敗しました');
+          }
         }
 
         async function deleteReservation(id) {
@@ -165,5 +220,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`サーバーが起動しました: http://localhost:${PORT}`);
+  console.log(`サーバー起動中: port ${PORT}`);
 });
