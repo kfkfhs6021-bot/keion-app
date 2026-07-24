@@ -23,7 +23,7 @@ const supabase = createClient(
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
+  return (h || 0) * 60 + (m || 0);
 }
 
 // 30分刻みの時間リストを生成
@@ -40,7 +40,7 @@ function generateTimeSlots() {
 
 // メインページ（カレンダー表示）
 app.get('/', async (req, res) => {
-  // スマホのブラウザキャッシュによる古い画面表示を防止
+  // ブラウザキャッシュによる古い表示を防止
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -48,7 +48,7 @@ app.get('/', async (req, res) => {
   const timeSlots = generateTimeSlots();
   let currentReservations = [];
 
-  // Supabaseから全予約データを取得
+  // Supabaseから全予約データを安全に取得
   try {
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       const { data: reservations, error } = await supabase
@@ -214,7 +214,7 @@ app.get('/', async (req, res) => {
                   ${dayBookings.map(b => {
                     const startMin = timeToMinutes(b.start_time);
                     const endMin = b.end_time === '24:00' ? 24 * 60 : timeToMinutes(b.end_time);
-                    const height = endMin - startMin;
+                    const height = Math.max(endMin - startMin, 30);
 
                     return `
                       <div class="event-card" style="top: ${startMin}px; height: ${height - 2}px;" onclick="event.stopPropagation();">
@@ -331,7 +331,7 @@ app.get('/', async (req, res) => {
         function timeToMinutes(t) {
           if (!t) return 0;
           const [h, m] = t.split(':').map(Number);
-          return h * 60 + m;
+          return (h || 0) * 60 + (m || 0);
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -350,19 +350,19 @@ app.get('/', async (req, res) => {
 
 // 予約追加処理
 app.post('/reserve', async (req, res) => {
-  const { date, startTime, endTime, name, detail } = req.body;
+  try {
+    const { date, startTime, endTime, name, detail } = req.body;
 
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-    return res.send(`
-      <script>
-        alert('エラー: Vercelの環境変数 (SUPABASE_URL / SUPABASE_KEY) が設定されていません。');
-        window.location.href = '/';
-      </script>
-    `);
-  }
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+      return res.send(`
+        <script>
+          alert('エラー: Vercelの環境変数 (SUPABASE_URL / SUPABASE_KEY) が設定されていません。');
+          window.location.href = '/';
+        </script>
+      `);
+    }
 
-  if (date && startTime && endTime && name) {
-    try {
+    if (date && startTime && endTime && name) {
       const newStart = timeToMinutes(startTime);
       const newEnd = endTime === '24:00' ? 24 * 60 : timeToMinutes(endTime);
 
@@ -375,7 +375,7 @@ app.post('/reserve', async (req, res) => {
       if (fetchErr) {
         return res.send(`
           <script>
-            alert('データ読み込みエラー: ${fetchErr.message}');
+            alert('データ読み込みエラー: ${fetchErr.message.replace(/'/g, "\\'")}');
             window.location.href = '/';
           </script>
         `);
@@ -411,39 +411,39 @@ app.post('/reserve', async (req, res) => {
       if (insertErr) {
         return res.send(`
           <script>
-            alert('保存エラー (Supabase): ${insertErr.message}');
+            alert('保存エラー (Supabase): ${insertErr.message.replace(/'/g, "\\'")}');
             window.location.href = '/';
           </script>
         `);
       }
-
-    } catch (err) {
-      return res.send(`
-        <script>
-          alert('サーバー例外エラー: ${err.message}');
-          window.location.href = '/';
-        </script>
-      `);
     }
-  }
 
-  // キャッシュを回避してリダイレクト（HTTP 303）
-  res.redirect(303, '/');
+    return res.redirect(303, '/');
+
+  } catch (err) {
+    console.error('サーバー処理例外:', err);
+    return res.send(`
+      <script>
+        alert('予期せぬエラーが発生しました: ${String(err.message || err).replace(/'/g, "\\'")}');
+        window.location.href = '/';
+      </script>
+    `);
+  }
 });
 
 // 予約削除処理
 app.post('/delete-reserve', async (req, res) => {
-  const { id } = req.body;
+  try {
+    const { id } = req.body;
 
-  if (id) {
-    try {
+    if (id) {
       await supabase
         .from('reservations')
         .delete()
         .eq('id', id);
-    } catch (err) {
-      console.error('予約削除エラー:', err);
     }
+  } catch (err) {
+    console.error('予約削除エラー:', err);
   }
 
   res.redirect(303, '/');
