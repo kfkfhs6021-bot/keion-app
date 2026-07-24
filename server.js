@@ -6,13 +6,12 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// --- Supabaseクライアントの初期化（エラー防止処理） ---
+// --- Supabaseクライアントの初期化 ---
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_KEY || '';
 
-// 環境変数が設定されていない場合でもクラッシュしないようにフォールバック値を設定
 if (!supabaseUrl || !supabaseKey) {
-  console.warn('⚠️ [警告] SUPABASE_URL または SUPABASE_KEY が環境変数に設定されていません。VercelのEnvironment Variablesを確認してください。');
+  console.warn('⚠️ [警告] SUPABASE_URL または SUPABASE_KEY が設定されていません。');
 }
 
 const supabase = createClient(
@@ -27,7 +26,7 @@ function timeToMinutes(timeStr) {
   return h * 60 + m;
 }
 
-// 00:00 〜 23:30 までの30分刻みの時間リストを生成
+// 30分刻みの時間リストを生成
 function generateTimeSlots() {
   const slots = [];
   for (let h = 0; h < 24; h++) {
@@ -41,10 +40,15 @@ function generateTimeSlots() {
 
 // メインページ（カレンダー表示）
 app.get('/', async (req, res) => {
+  // スマホのブラウザキャッシュによる古い画面表示を防止
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   const timeSlots = generateTimeSlots();
   let currentReservations = [];
 
-  // Supabaseから全予約データを安全に取得
+  // Supabaseから全予約データを取得
   try {
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       const { data: reservations, error } = await supabase
@@ -61,7 +65,7 @@ app.get('/', async (req, res) => {
     console.error('データベース接続例外:', err);
   }
 
-  // 今日から1ヶ月分（31日間）の日付リストを動的に自動生成
+  // 31日間分の日付リストを動的生成
   const dates = [];
   const today = new Date();
 
@@ -348,16 +352,34 @@ app.get('/', async (req, res) => {
 app.post('/reserve', async (req, res) => {
   const { date, startTime, endTime, name, detail } = req.body;
 
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+    return res.send(`
+      <script>
+        alert('エラー: Vercelの環境変数 (SUPABASE_URL / SUPABASE_KEY) が設定されていません。');
+        window.location.href = '/';
+      </script>
+    `);
+  }
+
   if (date && startTime && endTime && name) {
     try {
       const newStart = timeToMinutes(startTime);
       const newEnd = endTime === '24:00' ? 24 * 60 : timeToMinutes(endTime);
 
-      // 同じ日の予約を取得して重複チェック
-      const { data: existingReservations } = await supabase
+      // 重複チェック
+      const { data: existingReservations, error: fetchErr } = await supabase
         .from('reservations')
         .select('*')
         .eq('date', date);
+
+      if (fetchErr) {
+        return res.send(`
+          <script>
+            alert('データ読み込みエラー: ${fetchErr.message}');
+            window.location.href = '/';
+          </script>
+        `);
+      }
 
       const isOverlap = (existingReservations || []).some(r => {
         const rStart = timeToMinutes(r.start_time);
@@ -375,8 +397,8 @@ app.post('/reserve', async (req, res) => {
         `);
       }
 
-      // Supabaseに新規予約を保存
-      await supabase.from('reservations').insert([
+      // Supabaseにインサート
+      const { error: insertErr } = await supabase.from('reservations').insert([
         {
           date,
           start_time: startTime,
@@ -385,12 +407,28 @@ app.post('/reserve', async (req, res) => {
           detail: detail || ''
         }
       ]);
+
+      if (insertErr) {
+        return res.send(`
+          <script>
+            alert('保存エラー (Supabase): ${insertErr.message}');
+            window.location.href = '/';
+          </script>
+        `);
+      }
+
     } catch (err) {
-      console.error('予約処理エラー:', err);
+      return res.send(`
+        <script>
+          alert('サーバー例外エラー: ${err.message}');
+          window.location.href = '/';
+        </script>
+      `);
     }
   }
 
-  res.redirect('/');
+  // キャッシュを回避してリダイレクト（HTTP 303）
+  res.redirect(303, '/');
 });
 
 // 予約削除処理
@@ -408,7 +446,7 @@ app.post('/delete-reserve', async (req, res) => {
     }
   }
 
-  res.redirect('/');
+  res.redirect(303, '/');
 });
 
 export default app;
