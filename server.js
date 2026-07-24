@@ -81,11 +81,15 @@ app.get('/', (req, res) => {
         /* カレンダー全体のスクロール容器 */
         .gcal-wrapper { overflow: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; border: 1px solid #cbd5e1; border-radius: 8px; position: relative; background: white; }
         
-        /* ヘッダー構造 */
-        .gcal-header { display: flex; position: sticky; top: 0; z-index: 20; background: #f8fafc; border-bottom: 1px solid #cbd5e1; }
-        .gcal-time-header { width: 65px; min-width: 65px; background: #f8fafc; border-right: 1px solid #cbd5e1; position: sticky; left: 0; z-index: 22; }
+        /* 1. ヘッダー全体 (縦スクロール時に上部に固定) */
+        .gcal-header { display: flex; position: sticky; top: 0; z-index: 20; background: #f8fafc; border-bottom: 1px solid #cbd5e1; min-width: max-content; }
+        
+        /* 1-A. ヘッダーの左上角（縦スクロール＆横スクロール両方で完全固定される領域） */
+        .gcal-time-header { width: 65px; min-width: 65px; background: #f8fafc; border-right: 1px solid #cbd5e1; position: sticky; left: 0; z-index: 30; }
+        
+        /* 1-B. 日付ヘッダー列群 */
         .gcal-days-header { display: flex; }
-        .gcal-day-col-header { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; text-align: center; padding: 10px 0; border-right: 1px solid #e2e8f0; }
+        .gcal-day-col-header { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; text-align: center; padding: 10px 0; border-right: 1px solid #e2e8f0; background: #f8fafc; }
         .gcal-day-col-header.today { background: #eff6ff; }
         
         .date-num { font-size: 18px; font-weight: 800; line-height: 1.1; color: #0f172a; }
@@ -94,14 +98,24 @@ app.get('/', (req, res) => {
         .sun .date-num, .sun .day-name { color: #dc2626; }
         .today-badge { display: inline-block; background: #2563eb; color: white; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-bottom: 2px; }
 
-        /* グリッド本体構造 */
-        .gcal-body { display: flex; position: relative; height: ${TOTAL_HEIGHT}px; }
+        /* 2. グリッド本体構造 */
+        .gcal-body { display: flex; position: relative; height: ${TOTAL_HEIGHT}px; min-width: max-content; }
         
-        /* 時間ラベル列 */
-        .gcal-time-col { width: 65px; min-width: 65px; position: sticky; left: 0; z-index: 15; background: #f8fafc; border-right: 1px solid #cbd5e1; height: 100%; }
-        .gcal-time-slot { height: ${HOUR_HEIGHT}px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 12px; font-weight: 700; color: #64748b; padding-top: 4px; }
+        /* 2-A. 時間目盛り列 (横スクロール時に左端にピッタリ固定) */
+        .gcal-time-col { 
+          width: 65px; 
+          min-width: 65px; 
+          position: sticky; 
+          left: 0; 
+          z-index: 15; 
+          background: #f8fafc; 
+          border-right: 1px solid #cbd5e1; 
+          height: 100%; 
+          box-shadow: 2px 0 5px rgba(0,0,0,0.03); /* 境目を分かりやすくするための影 */
+        }
+        .gcal-time-slot { height: ${HOUR_HEIGHT}px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 12px; font-weight: 700; color: #64748b; padding-top: 4px; box-sizing: border-box; }
 
-        /* 日毎のタイムライン列 */
+        /* 2-B. 日毎のタイムライン列 */
         .gcal-day-col { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; position: relative; border-right: 1px solid #e2e8f0; height: 100%; background-image: linear-gradient(to bottom, #f1f5f9 1px, transparent 1px); background-size: 100% ${HOUR_HEIGHT / 2}px; }
         .gcal-day-col.today { background-color: rgba(239, 246, 255, 0.4); }
 
