@@ -1,15 +1,15 @@
 import express from 'express';
+import { createClient } from '@supabase/supabase-js';
 
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// 予約データ（初期サンプルデータ）
-let reservations = [
-  { id: 1, date: '2026-07-24', startTime: '10:30', endTime: '12:30', name: '山田 太郎', detail: 'バンド練習' },
-  { id: 2, date: '2026-07-25', startTime: '14:00', endTime: '16:00', name: '佐藤 花子', detail: '個人練習' },
-];
+// Supabaseクライアントの初期化
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 時間 ('HH:MM') を 分(数字) に変換するヘルパー
 function timeToMinutes(timeStr) {
@@ -30,8 +30,19 @@ function generateTimeSlots() {
 }
 
 // メインページ（カレンダー表示）
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
   const timeSlots = generateTimeSlots();
+  
+  // Supabaseから全予約データを取得
+  const { data: reservations, error } = await supabase
+    .from('reservations')
+    .select('*');
+
+  if (error) {
+    console.error('予約データの取得エラー:', error);
+  }
+
+  const currentReservations = reservations || [];
   
   // 今日から1ヶ月分（31日間）の日付リストを動的に自動生成
   const dates = [];
@@ -56,10 +67,9 @@ app.get('/', (req, res) => {
     });
   }
 
-  // 1時間の高さ（ピクセル） -> 60px（1分＝1px）
   const HOUR_HEIGHT = 60; 
-  const TOTAL_HEIGHT = 24 * HOUR_HEIGHT; // 1440px
-  const DAY_WIDTH = 160; // 1日の列幅 (160pxでGoogleカレンダー並みに広々)
+  const TOTAL_HEIGHT = 24 * HOUR_HEIGHT; 
+  const DAY_WIDTH = 160; 
 
   const html = `
     <!DOCTYPE html>
@@ -78,16 +88,9 @@ app.get('/', (req, res) => {
         .btn-custom-add { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 15px; width: 100%; max-width: 320px; box-shadow: 0 2px 4px rgba(37,99,235,0.25); }
         .btn-custom-add:active { background: #1d4ed8; }
 
-        /* カレンダー全体のスクロール容器 */
         .gcal-wrapper { overflow: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; border: 1px solid #cbd5e1; border-radius: 8px; position: relative; background: white; }
-        
-        /* 1. ヘッダー全体 (縦スクロール時に上部に固定) */
         .gcal-header { display: flex; position: sticky; top: 0; z-index: 20; background: #f8fafc; border-bottom: 1px solid #cbd5e1; min-width: max-content; }
-        
-        /* 1-A. ヘッダーの左上角（縦スクロール＆横スクロール両方で完全固定される領域） */
         .gcal-time-header { width: 65px; min-width: 65px; background: #f8fafc; border-right: 1px solid #cbd5e1; position: sticky; left: 0; z-index: 30; }
-        
-        /* 1-B. 日付ヘッダー列群 */
         .gcal-days-header { display: flex; }
         .gcal-day-col-header { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; text-align: center; padding: 10px 0; border-right: 1px solid #e2e8f0; background: #f8fafc; }
         .gcal-day-col-header.today { background: #eff6ff; }
@@ -98,32 +101,16 @@ app.get('/', (req, res) => {
         .sun .date-num, .sun .day-name { color: #dc2626; }
         .today-badge { display: inline-block; background: #2563eb; color: white; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-bottom: 2px; }
 
-        /* 2. グリッド本体構造 */
         .gcal-body { display: flex; position: relative; height: ${TOTAL_HEIGHT}px; min-width: max-content; }
-        
-        /* 2-A. 時間目盛り列 (横スクロール時に左端にピッタリ固定) */
-        .gcal-time-col { 
-          width: 65px; 
-          min-width: 65px; 
-          position: sticky; 
-          left: 0; 
-          z-index: 15; 
-          background: #f8fafc; 
-          border-right: 1px solid #cbd5e1; 
-          height: 100%; 
-          box-shadow: 2px 0 5px rgba(0,0,0,0.03); /* 境目を分かりやすくするための影 */
-        }
+        .gcal-time-col { width: 65px; min-width: 65px; position: sticky; left: 0; z-index: 15; background: #f8fafc; border-right: 1px solid #cbd5e1; height: 100%; box-shadow: 2px 0 5px rgba(0,0,0,0.03); }
         .gcal-time-slot { height: ${HOUR_HEIGHT}px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 12px; font-weight: 700; color: #64748b; padding-top: 4px; box-sizing: border-box; }
 
-        /* 2-B. 日毎のタイムライン列 */
         .gcal-day-col { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; position: relative; border-right: 1px solid #e2e8f0; height: 100%; background-image: linear-gradient(to bottom, #f1f5f9 1px, transparent 1px); background-size: 100% ${HOUR_HEIGHT / 2}px; }
         .gcal-day-col.today { background-color: rgba(239, 246, 255, 0.4); }
 
-        /* 30分ごとの透明なタップ領域 */
         .click-slot { position: absolute; left: 0; width: 100%; height: 30px; cursor: pointer; }
         .click-slot:hover { background-color: rgba(37, 99, 235, 0.08); }
 
-        /* Googleカレンダー風 予定イベントカード */
         .event-card {
           position: absolute;
           left: 4px;
@@ -149,7 +136,6 @@ app.get('/', (req, res) => {
         .delete-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.15); color: white; border: none; border-radius: 4px; width: 22px; height: 22px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
         .delete-btn:active { background: #ef4444; }
 
-        /* モーダル */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; padding: 15px; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
         .form-group { margin-bottom: 14px; text-align: left; }
@@ -168,7 +154,6 @@ app.get('/', (req, res) => {
         </div>
         
         <div class="gcal-wrapper">
-          <!-- ヘッダー (日付) -->
           <div class="gcal-header">
             <div class="gcal-time-header"></div>
             <div class="gcal-days-header">
@@ -188,42 +173,36 @@ app.get('/', (req, res) => {
             </div>
           </div>
 
-          <!-- グリッド本体 -->
           <div class="gcal-body">
-            <!-- 時間目盛り列 -->
             <div class="gcal-time-col">
               ${Array.from({length: 24}).map((_, h) => `
                 <div class="gcal-time-slot">${String(h).padStart(2, '0')}:00</div>
               `).join('')}
             </div>
 
-            <!-- 日毎のタイムライン列 -->
             ${dates.map(d => {
-              // この日の予約を取得
-              const dayBookings = reservations.filter(r => r.date === d.formatted);
+              const dayBookings = currentReservations.filter(r => r.date === d.formatted);
 
               return `
                 <div class="gcal-day-col ${d.isToday ? 'today' : ''}">
-                  <!-- 30分ごとの空きクリック領域 -->
                   ${timeSlots.map(t => {
                     const min = timeToMinutes(t);
                     return `<div class="click-slot" style="top: ${min}px;" onclick="openForm('${d.formatted}', '${t}')"></div>`;
                   }).join('')}
 
-                  <!-- 予約イベントカードの描画 -->
                   ${dayBookings.map(b => {
-                    const startMin = timeToMinutes(b.startTime);
-                    const endMin = b.endTime === '24:00' ? 24 * 60 : timeToMinutes(b.endTime);
-                    const height = endMin - startMin; // 1分＝1px なのでそのまま高さに指定
+                    const startMin = timeToMinutes(b.start_time);
+                    const endMin = b.end_time === '24:00' ? 24 * 60 : timeToMinutes(b.end_time);
+                    const height = endMin - startMin;
 
                     return `
                       <div class="event-card" style="top: ${startMin}px; height: ${height - 2}px;" onclick="event.stopPropagation();">
-                        <form action="/delete-reserve" method="POST" style="display:inline;" onsubmit="return confirm('${b.name}の予約（${b.startTime}〜${b.endTime}）を削除しますか？');">
+                        <form action="/delete-reserve" method="POST" style="display:inline;" onsubmit="return confirm('${b.name}の予約（${b.start_time}〜${b.end_time}）を削除しますか？');">
                           <input type="hidden" name="id" value="${b.id}">
                           <button type="submit" class="delete-btn" title="削除">×</button>
                         </form>
                         <div class="event-title">${b.name}</div>
-                        <div class="event-time">${b.startTime} - ${b.endTime}</div>
+                        <div class="event-time">${b.start_time} - ${b.end_time}</div>
                         ${b.detail ? `<div class="event-detail">${b.detail}</div>` : ''}
                       </div>
                     `;
@@ -235,7 +214,6 @@ app.get('/', (req, res) => {
         </div>
       </div>
 
-      <!-- 予約登録モーダル -->
       <div id="reservationModal" class="modal">
         <div class="modal-content">
           <h3 style="margin-top: 0; font-size: 16px; color: #0f172a;">新規予約</h3>
@@ -334,11 +312,10 @@ app.get('/', (req, res) => {
           return h * 60 + m;
         }
 
-        // ページ読み込み時に現在時刻（または午前8時付近）までスクロール
         window.addEventListener('DOMContentLoaded', () => {
           const wrapper = document.querySelector('.gcal-wrapper');
           if (wrapper) {
-            wrapper.scrollTop = 8 * 60; // 朝8:00の位置に自動スクロール
+            wrapper.scrollTop = 8 * 60;
           }
         });
       </script>
@@ -350,17 +327,22 @@ app.get('/', (req, res) => {
 });
 
 // 予約追加処理
-app.post('/reserve', (req, res) => {
+app.post('/reserve', async (req, res) => {
   const { date, startTime, endTime, name, detail } = req.body;
 
   if (date && startTime && endTime && name) {
     const newStart = timeToMinutes(startTime);
     const newEnd = endTime === '24:00' ? 24 * 60 : timeToMinutes(endTime);
 
-    const isOverlap = reservations.some(r => {
-      if (r.date !== date) return false;
-      const rStart = timeToMinutes(r.startTime);
-      const rEnd = r.endTime === '24:00' ? 24 * 60 : timeToMinutes(r.endTime);
+    // 同じ日の予約を取得して重複チェック
+    const { data: existingReservations } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('date', date);
+
+    const isOverlap = (existingReservations || []).some(r => {
+      const rStart = timeToMinutes(r.start_time);
+      const rEnd = r.end_time === '24:00' ? 24 * 60 : timeToMinutes(r.end_time);
 
       return Math.max(newStart, rStart) < Math.min(newEnd, rEnd);
     });
@@ -374,25 +356,30 @@ app.post('/reserve', (req, res) => {
       `);
     }
 
-    reservations.push({
-      id: Date.now(),
-      date,
-      startTime,
-      endTime,
-      name,
-      detail: detail || ''
-    });
+    // Supabaseに新規予約を保存
+    await supabase.from('reservations').insert([
+      {
+        date,
+        start_time: startTime,
+        end_time: endTime,
+        name,
+        detail: detail || ''
+      }
+    ]);
   }
 
   res.redirect('/');
 });
 
 // 予約削除処理
-app.post('/delete-reserve', (req, res) => {
+app.post('/delete-reserve', async (req, res) => {
   const { id } = req.body;
 
   if (id) {
-    reservations = reservations.filter(r => r.id !== Number(id));
+    await supabase
+      .from('reservations')
+      .delete()
+      .eq('id', id);
   }
 
   res.redirect('/');
