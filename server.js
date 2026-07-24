@@ -1,6 +1,4 @@
 import express from 'express';
-import React from 'react';
-import { renderToString } from 'react-dom/server';
 
 const app = express();
 
@@ -33,7 +31,7 @@ app.get('/', (req, res) => {
         th { background: #f3f4f6; }
         .time-col { background: #f9fafb; font-weight: bold; width: 80px; }
         .booking-card { background: #dbeafe; color: #1e3a8a; padding: 8px; border-radius: 6px; font-size: 14px; text-align: left; }
-        .empty-slot { color: #9ca3af; cursor: pointer; }
+        .empty-slot { color: #9ca3af; }
       </style>
     </head>
     <body>
@@ -75,5 +73,5 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// Vercelでサーバーレス関数として動かすために必須のエクスポート
+// Vercelで動かすためのエクスポート
 export default app;
