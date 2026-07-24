@@ -6,13 +6,23 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Supabaseクライアントの初期化
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// --- Supabaseクライアントの初期化（エラー防止処理） ---
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_KEY || '';
+
+// 環境変数が設定されていない場合でもクラッシュしないようにフォールバック値を設定
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('⚠️ [警告] SUPABASE_URL または SUPABASE_KEY が環境変数に設定されていません。VercelのEnvironment Variablesを確認してください。');
+}
+
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseKey || 'placeholder'
+);
 
 // 時間 ('HH:MM') を 分(数字) に変換するヘルパー
 function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 }
@@ -32,18 +42,25 @@ function generateTimeSlots() {
 // メインページ（カレンダー表示）
 app.get('/', async (req, res) => {
   const timeSlots = generateTimeSlots();
-  
-  // Supabaseから全予約データを取得
-  const { data: reservations, error } = await supabase
-    .from('reservations')
-    .select('*');
+  let currentReservations = [];
 
-  if (error) {
-    console.error('予約データの取得エラー:', error);
+  // Supabaseから全予約データを安全に取得
+  try {
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+      const { data: reservations, error } = await supabase
+        .from('reservations')
+        .select('*');
+
+      if (error) {
+        console.error('予約データの取得エラー:', error.message);
+      } else {
+        currentReservations = reservations || [];
+      }
+    }
+  } catch (err) {
+    console.error('データベース接続例外:', err);
   }
 
-  const currentReservations = reservations || [];
-  
   // 今日から1ヶ月分（31日間）の日付リストを動的に自動生成
   const dates = [];
   const today = new Date();
@@ -51,13 +68,13 @@ app.get('/', async (req, res) => {
   for (let i = 0; i < 31; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    
+
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const date = String(d.getDate()).padStart(2, '0');
     const dayOfWeekNum = d.getDay();
     const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dayOfWeekNum];
-    
+
     dates.push({
       formatted: `${year}-${month}-${date}`,
       monthDate: `${Number(month)}/${Number(date)}`,
@@ -67,9 +84,9 @@ app.get('/', async (req, res) => {
     });
   }
 
-  const HOUR_HEIGHT = 60; 
-  const TOTAL_HEIGHT = 24 * HOUR_HEIGHT; 
-  const DAY_WIDTH = 160; 
+  const HOUR_HEIGHT = 60;
+  const TOTAL_HEIGHT = 24 * HOUR_HEIGHT;
+  const DAY_WIDTH = 160;
 
   const html = `
     <!DOCTYPE html>
@@ -83,7 +100,7 @@ app.get('/', async (req, res) => {
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 10px; background: #f8fafc; margin: 0; color: #1e293b; }
         .container { max-width: 100%; margin: 0 auto; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
         h2 { text-align: center; color: #0f172a; margin-top: 4px; margin-bottom: 12px; font-size: 20px; font-weight: 700; }
-        
+
         .header-actions { text-align: center; margin-bottom: 12px; }
         .btn-custom-add { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 15px; width: 100%; max-width: 320px; box-shadow: 0 2px 4px rgba(37,99,235,0.25); }
         .btn-custom-add:active { background: #1d4ed8; }
@@ -94,7 +111,7 @@ app.get('/', async (req, res) => {
         .gcal-days-header { display: flex; }
         .gcal-day-col-header { width: ${DAY_WIDTH}px; min-width: ${DAY_WIDTH}px; text-align: center; padding: 10px 0; border-right: 1px solid #e2e8f0; background: #f8fafc; }
         .gcal-day-col-header.today { background: #eff6ff; }
-        
+
         .date-num { font-size: 18px; font-weight: 800; line-height: 1.1; color: #0f172a; }
         .day-name { font-size: 13px; font-weight: 600; color: #64748b; margin-top: 2px; }
         .sat .date-num, .sat .day-name { color: #2563eb; }
@@ -152,7 +169,7 @@ app.get('/', async (req, res) => {
         <div class="header-actions">
           <button class="btn-custom-add" onclick="openForm('', '')">＋ 新規予約を追加</button>
         </div>
-        
+
         <div class="gcal-wrapper">
           <div class="gcal-header">
             <div class="gcal-time-header"></div>
@@ -236,17 +253,17 @@ app.get('/', async (req, res) => {
                 </select>
               </div>
             </div>
-            
+
             <div class="form-group">
               <label for="name">名前</label>
               <input type="text" id="name" name="name" required placeholder="例：高橋 健太">
             </div>
-            
+
             <div class="form-group">
               <label for="detail">メモ</label>
               <input type="text" id="detail" name="detail" placeholder="例：Aスタジオ / ドラム練習">
             </div>
-            
+
             <button type="submit" class="btn-submit">予約する</button>
             <button type="button" class="btn-cancel" onclick="closeForm()">キャンセル</button>
           </form>
@@ -280,10 +297,10 @@ app.get('/', async (req, res) => {
         function adjustEndTime() {
           const start = document.getElementById('startTime').value;
           const [h, m] = start.split(':').map(Number);
-          
+
           let endH = h + 1;
           let endM = m;
-          
+
           let endStr = String(endH).padStart(2, '0') + ':' + String(endM).padStart(2, '0');
           if (endH >= 24) endStr = '24:00';
 
@@ -308,6 +325,7 @@ app.get('/', async (req, res) => {
         }
 
         function timeToMinutes(t) {
+          if (!t) return 0;
           const [h, m] = t.split(':').map(Number);
           return h * 60 + m;
         }
@@ -331,41 +349,45 @@ app.post('/reserve', async (req, res) => {
   const { date, startTime, endTime, name, detail } = req.body;
 
   if (date && startTime && endTime && name) {
-    const newStart = timeToMinutes(startTime);
-    const newEnd = endTime === '24:00' ? 24 * 60 : timeToMinutes(endTime);
+    try {
+      const newStart = timeToMinutes(startTime);
+      const newEnd = endTime === '24:00' ? 24 * 60 : timeToMinutes(endTime);
 
-    // 同じ日の予約を取得して重複チェック
-    const { data: existingReservations } = await supabase
-      .from('reservations')
-      .select('*')
-      .eq('date', date);
+      // 同じ日の予約を取得して重複チェック
+      const { data: existingReservations } = await supabase
+        .from('reservations')
+        .select('*')
+        .eq('date', date);
 
-    const isOverlap = (existingReservations || []).some(r => {
-      const rStart = timeToMinutes(r.start_time);
-      const rEnd = r.end_time === '24:00' ? 24 * 60 : timeToMinutes(r.end_time);
+      const isOverlap = (existingReservations || []).some(r => {
+        const rStart = timeToMinutes(r.start_time);
+        const rEnd = r.end_time === '24:00' ? 24 * 60 : timeToMinutes(r.end_time);
 
-      return Math.max(newStart, rStart) < Math.min(newEnd, rEnd);
-    });
+        return Math.max(newStart, rStart) < Math.min(newEnd, rEnd);
+      });
 
-    if (isOverlap) {
-      return res.send(`
-        <script>
-          alert('指定された時間帯には既に別の予約が入っています。時間を変更してください。');
-          window.location.href = '/';
-        </script>
-      `);
-    }
-
-    // Supabaseに新規予約を保存
-    await supabase.from('reservations').insert([
-      {
-        date,
-        start_time: startTime,
-        end_time: endTime,
-        name,
-        detail: detail || ''
+      if (isOverlap) {
+        return res.send(`
+          <script>
+            alert('指定された時間帯には既に別の予約が入っています。時間を変更してください。');
+            window.location.href = '/';
+          </script>
+        `);
       }
-    ]);
+
+      // Supabaseに新規予約を保存
+      await supabase.from('reservations').insert([
+        {
+          date,
+          start_time: startTime,
+          end_time: endTime,
+          name,
+          detail: detail || ''
+        }
+      ]);
+    } catch (err) {
+      console.error('予約処理エラー:', err);
+    }
   }
 
   res.redirect('/');
@@ -376,10 +398,14 @@ app.post('/delete-reserve', async (req, res) => {
   const { id } = req.body;
 
   if (id) {
-    await supabase
-      .from('reservations')
-      .delete()
-      .eq('id', id);
+    try {
+      await supabase
+        .from('reservations')
+        .delete()
+        .eq('id', id);
+    } catch (err) {
+      console.error('予約削除エラー:', err);
+    }
   }
 
   res.redirect('/');
