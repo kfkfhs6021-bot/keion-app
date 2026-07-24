@@ -1,26 +1,16 @@
 {
   "name": "keion-app",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "main": "server.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "node server.js"
   },
   "dependencies": {
-    "next": "16.2.9",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "express": "^4.22.2"
   },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.9",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
 }
