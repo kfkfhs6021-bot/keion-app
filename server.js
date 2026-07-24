@@ -33,7 +33,7 @@ function generateTimeSlots() {
 app.get('/', (req, res) => {
   const timeSlots = generateTimeSlots();
   
-  // 今日から1ヶ月分（31日間）の日付リストを動的に自動生成
+  // 今日から1ヶ月分（31日間）の日付リストを自動生成
   const dates = [];
   const today = new Date();
 
@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
       formatted: `${year}-${month}-${date}`,
       monthDate: `${Number(month)}/${Number(date)}`,
       dayOfWeek,
-      dayOfWeekNum, // 0:日, 6:土
+      dayOfWeekNum,
       isToday: i === 0
     });
   }
@@ -61,51 +61,53 @@ app.get('/', (req, res) => {
     <html lang="ja">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
       <title>スタジオ予約表</title>
       <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 15px; background: #f8fafc; margin: 0; }
-        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h2 { text-align: center; color: #0f172a; margin-top: 0; margin-bottom: 16px; font-size: 22px; font-weight: 700; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 10px; background: #f8fafc; margin: 0; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #0f172a; margin-top: 4px; margin-bottom: 12px; font-size: 20px; font-weight: 700; }
         
-        .header-actions { text-align: center; margin-bottom: 16px; }
-        .btn-custom-add { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .btn-custom-add:hover { background: #1d4ed8; }
+        .header-actions { text-align: center; margin-bottom: 12px; }
+        .btn-custom-add { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; width: 100%; max-width: 320px; box-shadow: 0 2px 4px rgba(37,99,235,0.2); }
+        .btn-custom-add:active { background: #1d4ed8; }
 
-        .table-wrapper { overflow-x: auto; max-height: 75vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e2e8f0; border-radius: 6px; }
+        /* スクロール枠 */
+        .table-wrapper { overflow-x: auto; max-height: 78vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border: 1px solid #cbd5e1; border-radius: 6px; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th, td { border: 1px solid #e2e8f0; padding: 0; text-align: center; vertical-align: top; }
         
-        /* ヘッダーデザインの調整 */
-        th { background: #f8fafc; height: 48px; vertical-align: middle; position: sticky; top: 0; z-index: 10; min-width: 95px; font-weight: normal; }
+        /* スマホで見やすいよう列幅と高さを拡大 */
+        th { background: #f8fafc; height: 52px; vertical-align: middle; position: sticky; top: 0; z-index: 10; min-width: 110px; font-weight: normal; }
         th.today-header { background: #eff6ff; }
         
-        .date-display { font-size: 14px; font-weight: 700; color: #1e293b; line-height: 1.1; }
-        .day-display { font-size: 11px; margin-top: 2px; color: #64748b; font-weight: 600; }
+        .date-display { font-size: 16px; font-weight: 700; color: #1e293b; line-height: 1.1; }
+        .day-display { font-size: 12px; margin-top: 3px; color: #64748b; font-weight: 600; }
         
-        /* 土日の色分け */
+        /* 土日カラー */
         .sat .date-display, .sat .day-display { color: #2563eb; }
         .sun .date-display, .sun .day-display { color: #dc2626; }
         
-        .today-badge { display: inline-block; background: #2563eb; color: white; font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: bold; margin-bottom: 2px; }
+        .today-badge { display: inline-block; background: #2563eb; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-bottom: 2px; }
 
-        .time-col { background: #f8fafc; font-weight: 600; width: 60px; min-width: 60px; position: sticky; left: 0; z-index: 11; font-size: 11px; color: #475569; height: 32px; line-height: 32px; border-right: 2px solid #cbd5e1; }
+        /* 時間固定列（文字サイズと固定位置を最適化） */
+        .time-col { background: #f8fafc; font-weight: 700; width: 68px; min-width: 68px; position: sticky; left: 0; z-index: 11; font-size: 12px; color: #334155; height: 40px; line-height: 40px; border-right: 2px solid #94a3b8; }
         
-        .hour-row { border-top: 1px solid #94a3b8; }
+        .hour-row { border-top: 2px solid #cbd5e1; }
         
-        .grid-cell { cursor: pointer; height: 32px; transition: background-color 0.12s; }
-        .grid-cell:hover { background-color: #f1f5f9; }
+        .grid-cell { cursor: pointer; height: 40px; transition: background-color 0.12s; }
+        .grid-cell:active { background-color: #e2e8f0; }
         
-        /* 予約カード（絵文字・「様」排除のすっきりデザイン） */
+        /* 予約カード（スマホで見やすいフォント＆サイズ調整） */
         .booking-card { 
-          background: #3b82f6; 
+          background: #2563eb; 
           color: white; 
-          padding: 5px 6px; 
-          border-radius: 4px; 
-          font-size: 12px; 
+          padding: 6px 8px; 
+          border-radius: 6px; 
           text-align: left; 
           position: relative; 
-          box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+          box-shadow: 0 1px 3px rgba(0,0,0,0.15); 
           height: 100%; 
           box-sizing: border-box;
           z-index: 5;
@@ -114,22 +116,22 @@ app.get('/', (req, res) => {
           justify-content: flex-start;
           overflow: hidden;
         }
-        .booking-name { font-weight: 700; font-size: 12px; line-height: 1.2; margin-right: 16px; word-break: break-all; }
-        .booking-time { font-size: 11px; opacity: 0.95; margin-top: 3px; font-weight: 500; }
-        .booking-detail { font-size: 10px; opacity: 0.85; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .booking-name { font-weight: 700; font-size: 13px; line-height: 1.2; margin-right: 20px; word-break: break-all; }
+        .booking-time { font-size: 12px; opacity: 0.95; margin-top: 4px; font-weight: 600; }
+        .booking-detail { font-size: 11px; opacity: 0.85; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        .delete-btn { position: absolute; top: 3px; right: 3px; background: transparent; color: rgba(255,255,255,0.8); border: none; border-radius: 3px; width: 16px; height: 16px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
-        .delete-btn:hover { background: #ef4444; color: white; }
+        .delete-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.15); color: white; border: none; border-radius: 4px; width: 22px; height: 22px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+        .delete-btn:active { background: #ef4444; }
         
-        /* モーダル */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 100; }
-        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-        .form-group { margin-bottom: 12px; text-align: left; }
-        .form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155; }
-        .form-group input, .form-group select { width: 100%; padding: 7px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; background: white; }
-        .time-range-group { display: flex; align-items: center; gap: 6px; }
-        .btn-submit { background: #2563eb; color: white; border: none; padding: 9px; width: 100%; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 6px; font-size: 13px; }
-        .btn-cancel { background: #94a3b8; color: white; border: none; padding: 6px; width: 100%; border-radius: 4px; cursor: pointer; margin-top: 6px; font-size: 12px; }
+        /* スマホ向けモーダル */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; padding: 15px; }
+        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .form-group { margin-bottom: 14px; text-align: left; }
+        .form-group label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #1e293b; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 15px; background: white; }
+        .time-range-group { display: flex; align-items: center; gap: 8px; }
+        .btn-submit { background: #2563eb; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: 700; margin-top: 8px; font-size: 15px; }
+        .btn-cancel { background: #94a3b8; color: white; border: none; padding: 8px; width: 100%; border-radius: 6px; cursor: pointer; margin-top: 8px; font-size: 13px; }
       </style>
     </head>
     <body>
@@ -217,7 +219,7 @@ app.get('/', (req, res) => {
       <!-- 予約登録モーダル -->
       <div id="reservationModal" class="modal">
         <div class="modal-content">
-          <h3 style="margin-top: 0; font-size: 15px; color: #0f172a;">新規予約</h3>
+          <h3 style="margin-top: 0; font-size: 16px; color: #0f172a;">新規予約</h3>
           <form action="/reserve" method="POST" onsubmit="return validateTimes();">
             <div class="form-group">
               <label for="formDate">日付</label>
