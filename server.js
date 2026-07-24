@@ -33,11 +33,11 @@ function generateTimeSlots() {
 app.get('/', (req, res) => {
   const timeSlots = generateTimeSlots(); // 30分単位（全48コマ）
   
-  // 今日から2週間分（14日間）の日付リストを生成
+  // 今日から1ヶ月分（31日間）の日付リストを動的に自動生成
   const dates = [];
   const today = new Date();
 
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 31; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     
@@ -48,7 +48,8 @@ app.get('/', (req, res) => {
     
     dates.push({
       formatted: `${year}-${month}-${date}`,
-      label: `${month}/${date}(${dayOfWeek})`
+      label: `${month}/${date}(${dayOfWeek})`,
+      isToday: i === 0
     });
   }
 
@@ -61,19 +62,22 @@ app.get('/', (req, res) => {
       <title>スタジオ予約表</title>
       <style>
         body { font-family: sans-serif; padding: 15px; background: #f9fafb; margin: 0; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         h2 { text-align: center; color: #111827; margin-top: 0; margin-bottom: 12px; font-size: 22px; }
         
         .header-actions { text-align: center; margin-bottom: 16px; }
         .btn-custom-add { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
         .btn-custom-add:hover { background: #1d4ed8; }
 
+        /* 1ヶ月分が見やすいようにスクロール枠を設定 */
         .table-wrapper { overflow-x: auto; max-height: 75vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e5e7eb; border-radius: 6px; }
-        table { width: 100%; min-width: 1000px; border-collapse: collapse; table-layout: fixed; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th, td { border: 1px solid #e5e7eb; padding: 0; text-align: center; vertical-align: top; }
-        th { background: #f3f4f6; font-size: 13px; height: 36px; vertical-align: middle; position: sticky; top: 0; z-index: 10; }
         
-        .time-col { background: #f9fafb; font-weight: bold; width: 65px; position: sticky; left: 0; z-index: 11; font-size: 11px; color: #4b5563; height: 32px; line-height: 32px; border-right: 2px solid #d1d5db; }
+        th { background: #f3f4f6; font-size: 13px; height: 38px; vertical-align: middle; position: sticky; top: 0; z-index: 10; min-width: 100px; }
+        th.today-header { background: #dbeafe; color: #1e40af; font-weight: bold; }
+        
+        .time-col { background: #f9fafb; font-weight: bold; width: 65px; min-width: 65px; position: sticky; left: 0; z-index: 11; font-size: 11px; color: #4b5563; height: 32px; line-height: 32px; border-right: 2px solid #d1d5db; }
         
         /* 正時（00分）の行を目立たせる */
         .hour-row { border-top: 2px solid #cbd5e1; }
@@ -129,41 +133,35 @@ app.get('/', (req, res) => {
           <table>
             <thead>
               <tr>
-                <th class="time-col">時間</th>
-                ${dates.map(d => `<th>${d.label}</th>`).join('')}
+                <th class="time-col" style="z-index: 12;">時間</th>
+                ${dates.map(d => `<th class="${d.isToday ? 'today-header' : ''}">${d.label}${d.isToday ? '<br><span style="font-size:10px; font-weight:normal;">(今日)</span>' : ''}</th>`).join('')}
               </tr>
             </thead>
             <tbody>
               ${(() => {
-                // セルの描画スキップ（rowspan対応）用フラグ
                 const skipCells = {};
                 dates.forEach(d => { skipCells[d.formatted] = 0; });
 
                 return timeSlots.map(time => {
-                  const currentMin = timeToMinutes(time);
                   const isHour = time.endsWith(':00');
 
                   return `
                     <tr class="${isHour ? 'hour-row' : ''}">
                       <td class="time-col">${time}</td>
                       ${dates.map(d => {
-                        // 他のコマからのrowspan展開によりスキップすべきセル
                         if (skipCells[d.formatted] > 0) {
                           skipCells[d.formatted]--;
                           return ''; 
                         }
 
-                        // この開始時間にぴったり始まる予約を検索
                         const booking = reservations.find(r => r.date === d.formatted && r.startTime === time);
 
                         if (booking) {
                           const startMin = timeToMinutes(booking.startTime);
                           const endMin = timeToMinutes(booking.endTime);
                           const durationMin = endMin - startMin;
-                          // 30分 = 1コマの行数 (rowspan)
                           const rowSpan = Math.max(1, Math.ceil(durationMin / 30));
 
-                          // スキップカウントをセット
                           skipCells[d.formatted] = rowSpan - 1;
 
                           return `
@@ -260,7 +258,6 @@ app.get('/', (req, res) => {
           document.getElementById('reservationModal').style.display = 'none';
         }
 
-        // 開始時間を選択したら、自動で1時間後を終了時間にセット
         function adjustEndTime() {
           const start = document.getElementById('startTime').value;
           const [h, m] = start.split(':').map(Number);
@@ -277,7 +274,6 @@ app.get('/', (req, res) => {
           }
         }
 
-        // 時間の整合性チェック
         function validateTimes() {
           const start = document.getElementById('startTime').value;
           const end = document.getElementById('endTime').value;
@@ -318,7 +314,6 @@ app.post('/reserve', (req, res) => {
       const rStart = timeToMinutes(r.startTime);
       const rEnd = r.endTime === '24:00' ? 24 * 60 : timeToMinutes(r.endTime);
 
-      // 時間帯が重なっているか評価
       return Math.max(newStart, rStart) < Math.min(newEnd, rEnd);
     });
 
