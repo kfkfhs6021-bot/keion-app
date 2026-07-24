@@ -1,76 +1,79 @@
-'use client';
+import express from 'express';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
 
-import React, { useState, useEffect } from 'react';
+const app = express();
 
-export default function CalendarReservation() {
-  // ① SSR（サーバーサイド描画）とクライアントの不一致を防ぐフラグ
-  const [isMounted, setIsMounted] = useState(false);
+// 予約データの初期値
+let reservations = [
+  { id: 1, date: '2026-07-24', time: '10:00', name: '山田 太郎', detail: '初回相談' },
+  { id: 2, date: '2026-07-25', time: '14:00', name: '佐藤 花子', detail: '打ち合わせ' },
+  { id: 3, date: '2026-07-26', time: '11:00', name: '鈴木 一郎', detail: '面談' },
+];
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  const [reservations, setReservations] = useState([
-    { id: 1, date: '2026-07-24', time: '10:00', name: '山田 太郎', detail: '初回相談' },
-    { id: 2, date: '2026-07-25', time: '14:00', name: '佐藤 花子', detail: '打ち合わせ' },
-    { id: 3, date: '2026-07-26', time: '11:00', name: '鈴木 一郎', detail: '面談' },
-  ]);
-
+// メインのカレンダーページを表示するルート
+app.get('/', (req, res) => {
   const timeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
   const dates = ['2026-07-24', '2026-07-25', '2026-07-26'];
 
-  // 読み込みが完了するまで画面表示を待つ
-  if (!isMounted) {
-    return null;
-  }
-
-  return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
-      <h2 style={{ textAlign: 'center', color: '#333' }}>📅 予約状況カレンダー</h2>
-      
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
-        <thead>
-          <tr>
-            <th style={{ border: '1px solid #ddd', padding: '12px', background: '#f8f9fa', width: '80px' }}>
-              時間
-            </th>
-            {dates.map(date => (
-              <th key={date} style={{ border: '1px solid #ddd', padding: '12px', background: '#f8f9fa' }}>
-                {date}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {timeSlots.map(time => (
-            <tr key={time}>
-              <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center', fontWeight: 'bold', background: '#fafafa' }}>
-                {time}
-              </td>
-              
-              {dates.map(date => {
-                const booking = reservations.find(r => r.date === date && r.time === time);
-                
-                return (
-                  <td key={`${date}-${time}`} style={{ border: '1px solid #ddd', padding: '8px', height: '80px', verticalAlign: 'top', width: '30%' }}>
-                    {booking ? (
-                      <div style={{ background: '#dbeafe', color: '#1e3a8a', padding: '8px', borderRadius: '6px', fontSize: '14px', height: '100%', boxSizing: 'border-box' }}>
-                        <strong>{booking.name} 様</strong>
-                        <div style={{ fontSize: '12px', marginTop: '4px' }}>{booking.detail}</div>
-                      </div>
-                    ) : (
-                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', cursor: 'pointer' }}
-                           onClick={() => alert(`${date}の${time}に新規予約を入れますか？`)}>
-                        空き
-                      </div>
-                    )}
-                  </td>
-                );
-              })}
+  // サーバーサイドでHTMLを組み立てる
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>予約状況カレンダー</title>
+      <style>
+        body { font-family: sans-serif; padding: 20px; background: #f9fafb; margin: 0; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        h2 { text-align: center; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: center; }
+        th { background: #f3f4f6; }
+        .time-col { background: #f9fafb; font-weight: bold; width: 80px; }
+        .booking-card { background: #dbeafe; color: #1e3a8a; padding: 8px; border-radius: 6px; font-size: 14px; text-align: left; }
+        .empty-slot { color: #9ca3af; cursor: pointer; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>📅 予約状況カレンダー</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>時間</th>
+              ${dates.map(date => `<th>${date}</th>`).join('')}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+          </thead>
+          <tbody>
+            ${timeSlots.map(time => `
+              <tr>
+                <td class="time-col">${time}</td>
+                ${dates.map(date => {
+                  const booking = reservations.find(r => r.date === date && r.time === time);
+                  if (booking) {
+                    return `<td>
+                      <div class="booking-card">
+                        <strong>${booking.name} 様</strong>
+                        <div style="font-size: 12px; margin-top: 4px;">${booking.detail}</div>
+                      </div>
+                    </td>`;
+                  } else {
+                    return `<td><span class="empty-slot">空き</span></td>`;
+                  }
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </body>
+    </html>
+  `;
+
+  res.send(html);
+});
+
+// Vercelでサーバーレス関数として動かすために必須のエクスポート
+export default app;
