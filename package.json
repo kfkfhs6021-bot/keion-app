@@ -1,6 +1,7 @@
 {
   "name": "keion-app",
   "version": "1.0.0",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +12,5 @@
   "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "license": "ISC"
 }
